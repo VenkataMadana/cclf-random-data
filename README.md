@@ -11,18 +11,69 @@ The PDF for this specification can be
 Each of the file types is generated using a Python script that generates random
 data based on the specifications provided in the PDF.
 
-Open `main.py` and change the `number_of` properties as desired, then execute
-`main.py` to generate the files. For example:
+## Setup
+
+Install the pinned dependency. The project is tested on Python 3.14.
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+## Generating files
+
+Execute `main.py` from the root of the repository to generate the files:
 
 ```bash
 python3 main.py
 ```
 
 This will generate fake CCLF files for each of the file types listed in the PDF.
+Any contents of the `_output` directory from earlier runs are deleted first.
+
+The defaults for the population sizes and the claims month are at the top of
+`main.py`. The sizes can also be set when running the script:
+
+```bash
+python3 main.py --beneficiaries 100 --providers 200 --claims 1000
+```
+
+Each run prints its seed. Pass it back with `--seed` to generate the same files
+again using the same version of Faker:
+
+```bash
+python3 main.py --seed 12345
+```
 
 The generated files will be written to the `_output` directory and have a
 filename that includes the date, time, and type of file. The filenames follow
 the formats specified in the requirements.
+
+Each claim belongs to one family and is only written to that family's files:
+
+| Family | Claim types | Files |
+| --- | --- | --- |
+| Part A | 10, 20, 30, 40, 50, 60, 61 | CCLF1, CCLF2, CCLF3, CCLF4, CCLFA |
+| Part B | 71, 72 | CCLF5, CCLFB |
+| DME | 81, 82 | CCLF6 |
+| Part D | 01, 02, 03 | CCLF7 |
+
+Patients are consistent across their claims. Each has an age, sex, and home
+state, a set of conditions that fit their age and sex, regular drugs, and a care
+team of local providers. Each claim is for one of the patient's conditions, or
+for an acute or routine reason, and its diagnoses, DRG, procedures, services,
+and drugs follow from that reason. Sicker patients have more claims. Field values
+such as DRGs, bill types, and revenue centers follow from the claim type. The
+clinical codes are in `utils/reference/clinical.py`. This data is plausible, but
+it is not statistically matched to real Medicare populations.
+
+Files are dated the first of the month after the claims, and are written to
+`_output/<yymmdd>`.
+
+Part A, Part B, and DME include related claims: some original claims have a
+cancellation claim with the same amounts, and some of those have an adjustment
+claim as well. Related claims share the natural key described in the PDF. Part
+D has final action claims only, with deleted claims having a blank NDC and a $0
+payment.
 
 Each file contains random data based on the specifications provided in the PDF.
 
@@ -30,6 +81,15 @@ The scripts use [Faker](https://faker.readthedocs.io/en/master/) to produce
 pseudo-random data for fields such as dates and names. The Faker library is used
 to generate realistic looking data, but it does not guarantee that the data will
 be realistic or accurate in any way.
+
+## Tests
+
+The tests generate files in a temporary directory and check them against the
+field layouts in the PDF. They do not touch the `_output` directory.
+
+```bash
+python3 -m unittest discover tests
+```
 
 ## Resources
 

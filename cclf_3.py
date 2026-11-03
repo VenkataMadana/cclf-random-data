@@ -1,74 +1,49 @@
-import os
-import random
 import sys
-import sys
-from datetime import datetime
-from faker import Faker
-faker = Faker()
 
 # Add the path of the folder where the module is located
 sys.path.append("./utils/")
-from utils import replicate_files
-from utils import get_claims, get_bene, get_prov
-from utils import ctc, icd
+from utils import get_file_date, open_cache_file, print_progress, replicate_files
+from utils import get_claims, get_prov
 
-# Define the path for the files.
-directory = f"./_output/cache"
-if not os.path.exists(directory):
-    os.makedirs(directory, exist_ok=True)
-
-# Capture arguments or default if not provided.
-if len(sys.argv) == 2:
-    # Capture arguments and convert them
-    try:
-        file_date = sys.argv[1]
-    except ValueError as e:
-        sys.exit(1)  # Exit with error code    
-else:
-    file_date = datetime.now().strftime("%Y-%m-%d")
+file_date = get_file_date()
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("A")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
-file_name = "CCLF3.txt"
-with open(f"{directory}/{file_name}", "w") as f:
+with open_cache_file("CCLF3") as f:
     # Enumerate over the claims.
     for index, claim in enumerate(claims):
 
         # Output a status message.
-        if(index == 0 or index + 1 == claims_count or index % 1000 == 0):
-            print(f"CCLF3 Processing for {file_date}: {int(100 * ((1 + index) / claims_count))}%", end="\r")
+        print_progress("CCLF3", file_date, index, claims_count)
         
-        # Get the beneficiary and NPI provider.
-        line = ""
-        bene = get_bene(claim["mbi"])
+        # Get the NPI provider.
         prov = get_prov(claim["npi"])
-        diag = random.choice(icd())
 
-        # 1-10
-        line += claim["num"].ljust(13)          # CUR_CLM_UNIQ_ID
-        line += claim["mbi"]                    # BENE_MBI_ID
-        line += "".ljust(11)                    # BENE_HIC_NUM
-        line += random.choice(ctc()).rjust(2)   # CLM_TYPE_CD
-        line += "1".rjust(2)                    # CLM_VAL_SQNC_NUM
-        line += diag["code"].rjust(7)           # CLM_PRCDR_CD
-        line += claim["from_dt"]                # CLM_PRCDR_PRFRM_DT
-        line += "".ljust(11)                    # BENE_EQTBL_BIC_HICN_NUM
-        line += prov["oscar"].ljust(6)          # PRVDR_OSCAR_NUM
-        line += claim["from_dt"]                # CLM_FROM_DT
+        # Only claims with procedures have records in this file.
+        for sequence, procedure in enumerate(claim["procs"], start=1):
+            line = ""
 
-        # 11-13
-        line += claim["thru_dt"]                # CLM_THRU_DT   
-        line += diag["ver"]                     # DGNS_PRCDR_ICD_IND
-        line += prov["fnpi"].rjust(20)          # CLM_BLG_PRVDR_OSCAR_NUM
-        line += "\n"
+            # 1-10
+            line += claim["num"].ljust(13)          # CUR_CLM_UNIQ_ID
+            line += claim["mbi"]                    # BENE_MBI_ID
+            line += "".ljust(11)                    # BENE_HIC_NUM
+            line += claim["ctc"]                    # CLM_TYPE_CD
+            line += f"{sequence:02}"                # CLM_VAL_SQNC_NUM
+            line += procedure.rjust(7)              # CLM_PRCDR_CD
+            line += claim["from_dt"]                # CLM_PRCDR_PRFRM_DT
+            line += "".ljust(11)                    # BENE_EQTBL_BIC_HICN_NUM
+            line += prov["oscar"].ljust(6)          # PRVDR_OSCAR_NUM
+            line += claim["from_dt"]                # CLM_FROM_DT
 
-        f.write(line)  
-    
-    print("")
+            # 11-13
+            line += claim["thru_dt"]                # CLM_THRU_DT   
+            line += claim["icd_ver"]                # DGNS_PRCDR_ICD_IND
+            line += prov["oscar"].ljust(20)         # CLM_BLG_PRVDR_OSCAR_NUM
+            line += "\n"
 
-print(f"CCLF3 Processing for {file_date}: Complete")
-replicate_files("CCLF3", file_date)    
-  
+            f.write(line)
+
+replicate_files("CCLF3", file_date)
