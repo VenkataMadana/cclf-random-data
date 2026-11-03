@@ -343,6 +343,24 @@ def ansi_group():
 def hpsa():
     return hpsa_get_codes()
 
+# Returns the file date passed by main, or today when run directly.
+def get_file_date():
+    if len(sys.argv) == 2:
+        return sys.argv[1]
+    return datetime.datetime.now().strftime("%Y-%m-%d")
+
+
+# Opens the temporary file that replicate_files copies from.
+def open_cache_file(type):
+    os.makedirs(cache_path, exist_ok=True)
+    return open(f"{cache_path}/{type}.txt", "w")
+
+
+def print_progress(type, date, index, count):
+    if index == 0 or index + 1 == count or index % 1000 == 0:
+        print(f"{type} Processing for {date}: {int(100 * ((1 + index) / count))}%", end="\r")
+
+
 # Returns the filenames for a ZC code across the models for a yymmdd date.
 def get_file_names(code, date):
     ids = get_aco_ids()
@@ -354,6 +372,7 @@ def get_file_names(code, date):
 
 
 def replicate_files(type, date):
+    print(f"{type} Processing for {date}: Complete")
     print(f"{type} for {date} processing...")
 
     # Create a date from the string.
