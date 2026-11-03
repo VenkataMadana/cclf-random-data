@@ -6,11 +6,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 from layouts import LAYOUTS
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "utils"))
 sys.path.insert(0, os.path.join(ROOT, "utils", "reference"))
+import caches
 from fips_county import get_codes as fips_county_codes
 from fips_state import get_abbreviations, get_codes as fips_state_codes
 from icd_procedure import get_codes as procedure_codes
@@ -63,7 +66,7 @@ class OutputTest(unittest.TestCase):
         copy_project(cls.project)
         generate(cls.project, seed=1)
         cls.output = os.path.join(cls.project, "_output")
-        cls.delivery = os.path.join(cls.output, "240801")
+        cls.delivery = os.path.join(cls.output, "240901")
 
         # Parse each file into one dictionary of field values per record.
         cls.records = {}
@@ -258,13 +261,90 @@ class OutputTest(unittest.TestCase):
             self.assertNotEqual(r["CRNT_NUM"], r["PRVS_NUM"])
             self.assertLessEqual(r["PRVS_ID_EFCTV_DT"], r["PRVS_ID_OBSLT_DT"])
 
+    def test_effective_dates_fall_between_service_and_file_dates(self):
+        for file_type in ("CCLF1", "CCLF5", "CCLF6"):
+            for r in self.records[file_type]:
+                self.assertLessEqual(r["CLM_THRU_DT"], r["CLM_EFCTV_DT"], file_type)
+                self.assertLessEqual(r["CLM_EFCTV_DT"], "2024-09-01", file_type)
+                self.assertEqual(r["CLM_EFCTV_DT"], r["CLM_IDR_LD_DT"], file_type)
+
+    def test_claims_have_one_adjustment_type(self):
+        for file_type in ("CCLF5", "CCLF6"):
+            types = {}
+            for r in self.records[file_type]:
+                adjustment = types.setdefault(r["CUR_CLM_UNIQ_ID"], r["CLM_ADJSMT_TYPE_CD"])
+                self.assertEqual(adjustment, r["CLM_ADJSMT_TYPE_CD"], file_type)
+            self.assertEqual({a.strip() for a in types.values()}, {"0", "1", "2"}, file_type)
+
+    def test_part_a_cancellations_net_against_their_originals(self):
+        related = {}
+        for r in self.records["CCLF1"]:
+            key = (r["CLM_BLG_PRVDR_OSCAR_NUM"], r["CLM_FROM_DT"], r["CLM_THRU_DT"], r["BENE_MBI_ID"])
+            related.setdefault(key, []).append(r)
+        self.check_cancellations(related, "CLM_PMT_AMT")
+
+    def test_part_b_and_dme_cancellations_net_against_their_originals(self):
+        for file_type in ("CCLF5", "CCLF6"):
+            related = {}
+            for r in self.records[file_type]:
+                key = (r["CLM_CNTL_NUM"], r["BENE_MBI_ID"], r["CLM_LINE_NUM"])
+                related.setdefault(key, []).append(r)
+            self.check_cancellations(related, "CLM_LINE_CVRD_PD_AMT")
+
+    def check_cancellations(self, related, amount_field):
+        cancellations = 0
+        for records in related.values():
+            by_type = {}
+            for r in records:
+                by_type.setdefault(r["CLM_ADJSMT_TYPE_CD"].strip(), []).append(r)
+            for cancellation in by_type.get("1", []):
+                cancellations += 1
+                self.assertIn("0", by_type)
+                original = by_type["0"][0]
+                self.assertEqual(float(cancellation[amount_field]), float(original[amount_field]))
+                self.assertLessEqual(original["CLM_EFCTV_DT"], cancellation["CLM_EFCTV_DT"])
+        self.assertTrue(cancellations)
+
+    def test_part_a_files_share_the_natural_key(self):
+        headers = {r["CUR_CLM_UNIQ_ID"]: r for r in self.records["CCLF1"]}
+        for file_type in ("CCLF3", "CCLF4"):
+            for r in self.records[file_type]:
+                header = headers[r["CUR_CLM_UNIQ_ID"]]
+                for field in ("CLM_BLG_PRVDR_OSCAR_NUM", "CLM_FROM_DT", "CLM_THRU_DT", "BENE_MBI_ID"):
+                    self.assertEqual(r[field], header[field], file_type)
+
+    def test_paid_amounts_are_not_signed(self):
+        for file_type, field in (("CCLF1", "CLM_PMT_AMT"), ("CCLF5", "CLM_LINE_CVRD_PD_AMT"), ("CCLF6", "CLM_LINE_CVRD_PD_AMT")):
+            for r in self.records[file_type]:
+                self.assertGreaterEqual(float(r[field]), 0, file_type)
+
+    def test_part_d_claim_types_match_adjustments(self):
+        adjustments = {"01": "0", "02": "2", "03": "1"}
+        records = self.records["CCLF7"]
+        self.assertEqual({r["CLM_TYPE_CD"] for r in records}, set(adjustments))
+        for r in records:
+            self.assertEqual(r["CLM_ADJSMT_TYPE_CD"].strip(), adjustments[r["CLM_TYPE_CD"]])
+            deleted = r["CLM_TYPE_CD"] == "03"
+            self.assertEqual(r["CLM_LINE_NDC_CD"].strip() == "", deleted)
+            self.assertEqual(float(r["CLM_LINE_BENE_PMT_AMT"]) == 0, deleted)
+
+    def test_betos_codes_are_betos(self):
+        for r in self.records["CCLF5"]:
+            self.assertRegex(r["HCPCS_BETOS_CD"], r"^[A-Z]\d[A-Z]$")
+
+    def test_claim_count_matches_the_request(self):
+        ids = set()
+        for file_type in ("CCLF1", "CCLF5", "CCLF6", "CCLF7"):
+            ids |= {r["CUR_CLM_UNIQ_ID"] for r in self.records[file_type]}
+        self.assertEqual(len(ids), 1000)
+
     def test_file_names_follow_the_conventions(self):
         ids = {}
         for file_type in list(LAYOUTS) + ["CCLF0"]:
             names = os.listdir(os.path.join(self.delivery, file_type))
             self.assertEqual(len(names), 9, file_type)
             for name in names:
-                match = re.fullmatch(rf"P\.([AFDKCP])(\d+)\.ACO\.ZC{file_type[-1]}([YR])24\.D240801\.T\d{{7}}", name)
+                match = re.fullmatch(rf"P\.([AFDKCP])(\d+)\.ACO\.ZC{file_type[-1]}([YR])24\.D240901\.T\d{{7}}", name)
                 self.assertIsNotNone(match, name)
                 model, entity, run = match.groups()
                 self.assertEqual(len(entity), FILE_NAME_IDS[model], name)
@@ -297,6 +377,17 @@ class OutputTest(unittest.TestCase):
                     self.assertEqual(f.read().splitlines(), [r["_line"] for r in records], name)
 
 
+class RelatedClaimsTest(unittest.TestCase):
+    def test_related_claims_do_not_exceed_the_quantity(self):
+        claims = []
+        with mock.patch.multiple(caches, claims=claims, cancellation_rate=1, readjustment_rate=1, first_claim_weights=[1, 0],
+                                 family_weights={"A": 1}, beneficiaries={}, providers={}):
+            caches.generate_beneficiaries(5, 2024, 8)
+            caches.generate_providers(5)
+            caches.generate_claims(2, 2024, 8)
+        self.assertEqual([claim["adj"] for claim in claims], ["0", "1"])
+
+
 class RunTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.mkdtemp()
@@ -318,6 +409,19 @@ class RunTest(unittest.TestCase):
         self.assertEqual(outputs(first), outputs(second))
         self.assertNotEqual(outputs(first), outputs(third))
 
+    def test_december_claims_keep_their_year_in_file_names(self):
+        project = os.path.join(self.temp, "project")
+        copy_project(project)
+        path = os.path.join(project, "main.py")
+        with open(path) as f:
+            source = f.read()
+        self.assertIn("claims_month = 8\n", source)
+        with open(path, "w") as f:
+            f.write(source.replace("claims_month = 8\n", "claims_month = 12\n"))
+        generate(project, seed=1)
+        for name in os.listdir(os.path.join(project, "_output", "250101", "CCLF1")):
+            self.assertRegex(name, r"\.ZC1[YR]24\.D250101\.")
+
     def test_main_fails_when_a_script_fails(self):
         project = os.path.join(self.temp, "project")
         copy_project(project)
@@ -325,7 +429,7 @@ class RunTest(unittest.TestCase):
             f.write("raise RuntimeError('broken')\n")
         with self.assertRaises(subprocess.CalledProcessError):
             generate(project, seed=1)
-        self.assertFalse(os.path.exists(os.path.join(project, "_output", "240801", "CCLF4")))
+        self.assertFalse(os.path.exists(os.path.join(project, "_output", "240901", "CCLF4")))
 
 
 if __name__ == "__main__":

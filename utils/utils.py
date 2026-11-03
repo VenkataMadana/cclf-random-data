@@ -15,8 +15,8 @@ from beneficiary_entitlement_buy_in_indicator import get_codes as bebi_get_codes
 from beneficiary_medicare_status import get_codes as bmcsc_get_codes
 from beneficiary_original_entitlement_reason_code import get_codes as beorcc_get_codes
 from beneficiary_race import get_codes as brc_get_codes
+from betos import get_codes as betos_get_codes
 from carrier_payment_denial import get_codes as cpd_get_codes
-from claim_adjustment_type import get_codes as catc_get_codes
 from claim_admission_type  import get_codes as actc_get_codes
 from claim_bill_facility_type import get_codes as cbfc_get_codes
 from claim_dispensing import get_codes as cdsc_get_codes
@@ -145,6 +145,12 @@ def get_aco_ids():
 
 
 @lru_cache(maxsize=None)
+def get_claims_year():
+    with open(f"{cache_path}/claims_year.pkl", 'rb') as f:
+        return pickle.load(f)
+
+
+@lru_cache(maxsize=None)
 def get_providers():
     if os.path.exists(f"{cache_path}/providers.pkl"):
         with open(f"{cache_path}/providers.pkl", 'rb') as f:
@@ -201,10 +207,6 @@ def brc():
 # Claim Admission Type Codes
 def atc():
     return actc_get_codes()
-
-# Claim Adjustment Type Codes
-def cat():
-    return catc_get_codes()
 
 # Claim Bill Facility Type Codes
 def cbfc():
@@ -284,6 +286,9 @@ def psc():
 def tsc():
     return tsc_get_codes()
 
+def betos():
+    return betos_get_codes()
+
 def pos():
     return pos_get_codes()
 
@@ -361,11 +366,14 @@ def print_progress(type, date, index, count):
         print(f"{type} Processing for {date}: {int(100 * ((1 + index) / count))}%", end="\r")
 
 
-# Returns the filenames for a ZC code across the models for a yymmdd date.
+# Returns the filenames for a ZC code across the models for a yymmdd date. The
+# year in the ZC element is the claims' year, which is not the file date's year
+# for December claims.
 def get_file_names(code, date):
     ids = get_aco_ids()
+    year = str(get_claims_year())[-2:]
     return [
-        f"P.{model}{ids[model]}.ACO.ZC{code}{run}{date[:2]}.D{date}.T0102030"
+        f"P.{model}{ids[model]}.ACO.ZC{code}{run}{year}.D{date}.T0102030"
         for model, (_, runs) in MODELS.items()
         for run in runs
     ]

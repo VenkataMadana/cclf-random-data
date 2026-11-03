@@ -25,6 +25,24 @@ mbi_change_rate = 0.05
 # files: A (CCLF1-4, CCLFA), B (CCLF5, CCLFB), DME (CCLF6), and D (CCLF7).
 family_weights = { "A": 30, "B": 40, "DME": 10, "D": 20 }
 
+# Claim Adjustment Type Codes (from the PDF).
+ORIGINAL = "0"
+CANCELLATION = "1"
+ADJUSTMENT = "2"
+
+# Specifies the share of first claims that are original and adjustment claims.
+first_claim_weights = [90, 10]
+
+# Specifies the share of original claims that are cancelled, and the share of
+# those that are then replaced by an adjustment claim.
+cancellation_rate = 0.05
+readjustment_rate = 0.5
+
+# Part D claim types and their adjustment types.
+PART_D_DELETED = "03"
+part_d_adjustments = { "01": ORIGINAL, "02": ADJUSTMENT, PART_D_DELETED: CANCELLATION }
+part_d_type_weights = [85, 10, 5]
+
 # ICD-10 replaced ICD-9 for services on or after this date.
 icd10_start = date(2015, 10, 1)
 
@@ -35,6 +53,7 @@ def cache_all(number_of_beneficiaries, number_of_providers, number_of_claims, cl
     cache_providers(number_of_providers)
     cache_claims(number_of_claims, claims_year, claims_month)
     cache_data("aco_ids", generate_aco_ids())
+    cache_data("claims_year", claims_year)
 
 def cache_beneficiaries(number_of_beneficiaries, claims_year, claims_month):
     print(f"\tBeneficiaries : {number_of_beneficiaries:,}")
@@ -141,12 +160,13 @@ def generate_providers(quantity):
 
 def generate_claims(quantity, claims_year, claims_month):
     period_start, period_end = get_month_range(claims_year, claims_month)
+    file_date = period_end + timedelta(days=1)
     bene_list = list(beneficiaries.values())
     prov_list = list(providers.values())
     families = list(family_weights)
     weights = list(family_weights.values())
 
-    for index in range(quantity):
+    while len(claims) < quantity:
 
         # Prepare the claim. Services cannot run past the month or a death.
         bene = random.choice(bene_list)
@@ -157,18 +177,30 @@ def generate_claims(quantity, claims_year, claims_month):
             last_date = date.fromisoformat(bene["dod"])
         claim_date = get_date_between(period_start, last_date)
         thru_date = get_date_between(claim_date, min(claim_date + timedelta(days=7), last_date))
+        effective_date = get_date_between(thru_date, file_date)
+
+        # Part D holds final action claims, so its type sets the adjustment type.
+        if family == "D":
+            claim_type = random.choices(ctc()[family], part_d_type_weights)[0]
+            adjustment = part_d_adjustments[claim_type]
+        else:
+            claim_type = random.choice(ctc()[family])
+            adjustment = random.choices([ORIGINAL, ADJUSTMENT], first_claim_weights)[0]
 
         # Generate the claim.
         claim = {
-            "num": f"{claims_year}{claims_month:02}{index + 1:07}",
+            "num": next_claim_num(claims_year, claims_month),
             "family": family,
-            "ctc": random.choice(ctc()[family]),
+            "ctc": claim_type,
+            "adj": adjustment,
             "icd_ver": "0" if claim_date >= icd10_start else "9",
             "ccn": faker.numerify("A#######"),
             "ocn": faker.numerify("B#######"),
             "mac": faker.numerify("MC###"),
             "from_dt": claim_date.strftime("%Y-%m-%d"),
             "thru_dt": thru_date.strftime("%Y-%m-%d"),
+            "efctv_dt": effective_date.strftime("%Y-%m-%d"),
+            "pmt_amt": "0.00" if claim_type == PART_D_DELETED else paid_amount(),
             "mbi": bene["mbi"],
             "npi": prov["npi"],
             "lines": []
@@ -181,11 +213,50 @@ def generate_claims(quantity, claims_year, claims_month):
                 "ln": f"{icl}",
                 "from_dt": cld,
                 "thru_dt": cld,
+                "pd_amt": paid_amount(),
             }
 
             claim["lines"].append(line)
 
         claims.append(claim)
+
+        if family != "D" and adjustment == ORIGINAL and random.random() < cancellation_rate:
+            generate_related_claims(claim, claims_year, claims_month, file_date)
+
+    # Related claims can run past the quantity. Dropping the last claims keeps
+    # every cancellation with its original.
+    del claims[quantity:]
+
+
+# Cancels an original claim, and sometimes replaces it with an adjustment claim.
+# These keep the original's natural key: its beneficiary and provider, service
+# dates, and control number.
+def generate_related_claims(original, claims_year, claims_month, file_date):
+    effective_date = get_date_between(date.fromisoformat(original["efctv_dt"]), file_date)
+    related = {
+        **original,
+        "adj": CANCELLATION,
+        "efctv_dt": effective_date.strftime("%Y-%m-%d"),
+    }
+
+    # Cancellation amounts are not signed, and match the original's amounts.
+    claims.append({**related, "num": next_claim_num(claims_year, claims_month)})
+
+    if random.random() < readjustment_rate:
+        claims.append({
+            **related,
+            "num": next_claim_num(claims_year, claims_month),
+            "adj": ADJUSTMENT,
+            "pmt_amt": paid_amount(),
+            "lines": [{**line, "pd_amt": paid_amount()} for line in original["lines"]],
+        })
+
+
+def next_claim_num(claims_year, claims_month):
+    return f"{claims_year}{claims_month:02}{len(claims) + 1:07}"
+
+def paid_amount():
+    return f"{random.uniform(0, 9999):.2f}"
 
 
 # Each model has one fake entity whose ID appears in all of its filenames.

@@ -5,7 +5,7 @@ import sys
 sys.path.append("./utils/")
 from utils import dol, get_file_date, open_cache_file, print_progress, replicate_files
 from utils import get_claims, get_prov
-from utils import rpt, tsc, pos, hcpcs, ppc, icd, cpd, pic, cat, flt, hcpcsm, cdc, tsc
+from utils import rpt, tsc, pos, hcpcs, ppc, icd, cpd, pic, flt, hcpcsm, cdc, betos
 
 file_date = get_file_date()
 
@@ -47,7 +47,7 @@ with open_cache_file("CCLF5") as f:
             line += claim_line["from_dt"]                   # CLM_LINE_FROM_DT
             line += claim_line["thru_dt"]                   # CLM_LINE_THRU_DT    
             line += random.choice(hcpcs())                  # CLM_LINE_HCPCS_CD  
-            line += str(dol()).rjust(15)                    # CLM_LINE_CVRD_PD_AMT
+            line += claim_line["pd_amt"].rjust(15)          # CLM_LINE_CVRD_PD_AMT
             line += random.choice(ppc()).ljust(1)           # CLM_LINE_PRMRY_PYR_CD
             line += diag["code"].rjust(7)                   # CLM_LINE_DGNS_CD
             line += prov["ein"].rjust(10)                   # CLM_RNDRG_PRVDR_TAX_NUM
@@ -56,9 +56,9 @@ with open_cache_file("CCLF5") as f:
             # 21-30
             line += random.choice(cpd()).ljust(2)           # CLM_CARR_PMT_DNL_CD
             line += random.choice(pic()).ljust(2)           # CLM_PRCSG_IND_CD
-            line += random.choice(cat()).ljust(2)           # CLM_ADJSMT_TYPE_CD
-            line += claim["from_dt"]                        # CLM_EFCTV_DT
-            line += claim["thru_dt"]                        # CLM_IDR_LD_DT
+            line += claim["adj"].ljust(2)                   # CLM_ADJSMT_TYPE_CD
+            line += claim["efctv_dt"]                       # CLM_EFCTV_DT
+            line += claim["efctv_dt"]                       # CLM_IDR_LD_DT
             line += claim["ccn"].rjust(40)                  # CLM_CNTL_NUM
             line += "".ljust(11)                            # BENE_EQTBL_BIC_HICN_NUM
             line += str(dol()).rjust(17)                    # CLM_LINE_ALOWD_CHRG_AMT
@@ -86,7 +86,7 @@ with open_cache_file("CCLF5") as f:
             line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_10_CD
             line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_11_CD
             line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_12_CD
-            line += random.choice(tsc()).ljust(3)           # HCPCS_BETOS_CD
+            line += random.choice(betos())                  # HCPCS_BETOS_CD
             line += prov["npi"].ljust(10)                   # CLM_RNDRG_PRVDR_NPI_NUM
 
             # 51-60

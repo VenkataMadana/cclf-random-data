@@ -57,6 +57,15 @@ Each claim belongs to one family and is only written to that family's files:
 | DME | 81, 82 | CCLF6 |
 | Part D | 01, 02, 03 | CCLF7 |
 
+Files are dated the first of the month after the claims, and are written to
+`_output/<yymmdd>`.
+
+Part A, Part B, and DME include related claims: some original claims have a
+cancellation claim with the same amounts, and some of those have an adjustment
+claim as well. Related claims share the natural key described in the PDF. Part
+D has final action claims only, with deleted claims having a blank NDC and a $0
+payment.
+
 Each file contains random data based on the specifications provided in the PDF.
 
 The scripts use [Faker](https://faker.readthedocs.io/en/master/) to produce

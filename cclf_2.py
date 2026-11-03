@@ -55,7 +55,7 @@ with open_cache_file("CCLF2") as f:
             # 21-23
             line += random.choice(hcpcsm())             # HCPCS_5_MDFR_CD
             line += random.choice(hipps()).rjust(5)     # CLM_REV_APC_HIPPS_CD
-            line += prov["oscar"].rjust(20)             # CLM_FAC_PRVDR_OSCAR_NUM
+            line += prov["oscar"].ljust(20)             # CLM_FAC_PRVDR_OSCAR_NUM
 
             line += "\n"
 

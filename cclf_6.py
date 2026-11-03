@@ -5,7 +5,7 @@ import sys
 sys.path.append("./utils/")
 from utils import dol, get_file_date, open_cache_file, print_progress, replicate_files
 from utils import get_claims, get_prov
-from utils import tsc, pos, hcpcs, ppc, cpd, pic, cat, cdc, tsc
+from utils import tsc, pos, hcpcs, ppc, cpd, pic, cdc
 
 file_date = get_file_date()
 
@@ -43,17 +43,17 @@ with open_cache_file("CCLF6") as f:
             # 11-20
             line += claim_line["thru_dt"]           # CLM_LINE_THRU_DT   
             line += random.choice(hcpcs())          # CLM_LINE_HCPCS_CD
-            line += str(dol()).rjust(15)            # CLM_LINE_CVRD_PD_AMT
+            line += claim_line["pd_amt"].rjust(15)  # CLM_LINE_CVRD_PD_AMT
             line += random.choice(ppc()).ljust(1)   # CLM_PRMRY_PYR_CD
             line += prov["npi"]                     # PAYTO_PRVDR_NPI_NUM
             line += prov["npi"]                     # ORDRG_PRVDR_NPI_NUM
             line += random.choice(cpd()).ljust(2)   # CLM_CARR_PMT_DNL_CD
             line += random.choice(pic()).ljust(2)   # CLM_PRCSG_IND_CD
-            line += random.choice(cat()).ljust(2)   # CLM_ADJSMT_TYPE_CD
-            line += claim["from_dt"]                # CLM_EFCTV_DT
+            line += claim["adj"].ljust(2)           # CLM_ADJSMT_TYPE_CD
+            line += claim["efctv_dt"]               # CLM_EFCTV_DT
             
             # 21-27
-            line += claim["thru_dt"]                # CLM_IDR_LD_DT
+            line += claim["efctv_dt"]               # CLM_IDR_LD_DT
             line += claim["ccn"].rjust(40)          # CLM_CNTL_NUM
             line += "".ljust(11)                    # BENE_EQTBL_BIC_HICN_NUM
             line += str(dol()).rjust(17)            # CLM_LINE_ALOWD_CHRG_AMT

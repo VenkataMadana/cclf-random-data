@@ -57,8 +57,11 @@ scripts = [
     "./cclf_b.py",
 ]
 
+# Files are dated the first of the month after the claims.
+next_month = datetime.date(claims_year, claims_month, 28) + datetime.timedelta(days=4)
+file_dt = next_month.replace(day=1).strftime("%Y-%m-%d")
+
 # Convert the arguments to strins.
-file_dt = datetime.date(claims_year, claims_month, 1).strftime("%Y-%m-%d")
 script_args = [str(file_dt)]
 
 # Stop at the first script that fails.

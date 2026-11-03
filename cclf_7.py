@@ -3,9 +3,9 @@ import sys
 
 # Add the path of the folder where the module is located
 sys.path.append("./utils/")
-from utils import dol, get_file_date, open_cache_file, print_progress, replicate_files
+from utils import get_file_date, open_cache_file, print_progress, replicate_files
 from utils import get_claims, get_prov
-from utils import cdsc, ndc, psiqc, daw, flt, rint, cat, pstc
+from utils import cdsc, ndc, psiqc, daw, flt, rint, pstc
 
 file_date = get_file_date()
 
@@ -29,7 +29,7 @@ with open_cache_file("CCLF7") as f:
         line += claim["num"].ljust(13)          # CUR_CLM_UNIQ_ID
         line += claim["mbi"]                    # BENE_MBI_ID
         line += "".ljust(11)                    # BENE_HIC_NUM
-        line += ndc()                           # CLM_LINE_NDC_CD
+        line += ("" if claim["adj"] == "1" else ndc()).ljust(11)  # CLM_LINE_NDC_CD
         line += claim["ctc"]                    # CLM_TYPE_CD
         line += claim["from_dt"]                # CLM_LINE_FROM_DT
         line += random.choice(psiqc())          # PRVDR_SRVC_ID__QLFYR_CD
@@ -42,10 +42,10 @@ with open_cache_file("CCLF7") as f:
         line += rint().zfill(9)                 # CLM_LINE_DAYS_SUPLY_QTY
         line += random.choice(psiqc())          # PRVDR_PRSBNG_ID_QLFYR_CD
         line += prov["npi"].ljust(20)           # CLM_PRSBNG_PRVDR_GNRC_ID_NUM
-        line += dol().rjust(13)                 # CLM_LINE_BENE_PMT_AMT
-        line += random.choice(cat()).ljust(2)   # CLM_ADJSMT_TYPE_CD
-        line += claim["from_dt"]                # CLM_EFCTV_DT
-        line += claim["thru_dt"]                # CLM_IDR_LD_DT
+        line += claim["pmt_amt"].rjust(13)      # CLM_LINE_BENE_PMT_AMT
+        line += claim["adj"].ljust(2)           # CLM_ADJSMT_TYPE_CD
+        line += claim["efctv_dt"]               # CLM_EFCTV_DT
+        line += claim["efctv_dt"]               # CLM_IDR_LD_DT
         line += rint().zfill(12)                # CLM_LINE_RX_SRVC_RFRNC_NUM  
         line += rint().rjust(9)                 # CLM_LINE_RX_FILL_NUM
 

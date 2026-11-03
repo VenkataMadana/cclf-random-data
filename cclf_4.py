@@ -42,7 +42,7 @@ with open_cache_file("CCLF4") as f:
         line += claim["thru_dt"]                # CLM_THRU_DT   
         line += random.choice(poa()).rjust(7)   # CLM_POA_IND
         line += diag["ver"]                     # DGNS_PRCDR_ICD_IND
-        line += prov["oscar"].rjust(20)         # CLM_BLG_PRVDR_OSCAR_NUM
+        line += prov["oscar"].ljust(20)         # CLM_BLG_PRVDR_OSCAR_NUM
         line += "\n"
 
         f.write(line)
