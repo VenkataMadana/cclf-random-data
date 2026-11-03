@@ -2,7 +2,7 @@
 # https://resdac.org/cms-data/variables/claim-medicare-non-payment-reason-code
 def get_codes():
     return [
-        "A"       # Covered worker's compensation (Obsolete)
+        "A",      # Covered worker's compensation (Obsolete)
         "B",      # Benefit exhausted
         "C",      # Custodial care - non-covered care(includes all 'beneficiary at fault' waiver cases) (Obsolete)
         "E",      # HMO out-of-plan services not emergency or urgently needed (Obsolete)

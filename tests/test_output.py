@@ -1,7 +1,10 @@
 import datetime
+import importlib
 import os
+import pickle
 import re
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -16,7 +19,8 @@ sys.path.insert(0, os.path.join(ROOT, "utils", "reference"))
 import caches
 from fips_county import get_codes as fips_county_codes
 from fips_state import get_abbreviations, get_codes as fips_state_codes
-from icd_procedure import get_codes as procedure_codes
+from clinical import ACUTE_EPISODES, CONDITIONS, DME_SERVICES, DRUG_NDCS, ROUTINE_VISIT, SERVICES
+from clinical import PART_A_TYPES as PART_A_RULES
 
 PART_A_TYPES = {"10", "20", "30", "40", "50", "60", "61"}
 PART_B_TYPES = {"71", "72"}
@@ -43,7 +47,7 @@ def copy_project(destination):
 
 def generate(directory, seed):
     subprocess.run(
-        [sys.executable, "main.py", "--seed", str(seed), "--beneficiaries", "200", "--providers", "100", "--claims", "1000"],
+        [sys.executable, "main.py", "--seed", str(seed), "--beneficiaries", "400", "--providers", "300", "--claims", "2000"],
         cwd=directory, check=True, capture_output=True,
     )
 
@@ -58,7 +62,7 @@ def read_tree(directory):
     return contents
 
 
-class OutputTest(unittest.TestCase):
+class GeneratedFilesTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.mkdtemp()
@@ -82,6 +86,7 @@ class OutputTest(unittest.TestCase):
     def tearDownClass(cls):
         shutil.rmtree(cls.temp)
 
+class OutputTest(GeneratedFilesTest):
     def test_every_file_has_records(self):
         for file_type, records in self.records.items():
             self.assertTrue(records, file_type)
@@ -131,13 +136,13 @@ class OutputTest(unittest.TestCase):
             seen |= ids
 
     def test_claim_ids_are_unique_in_single_record_files(self):
-        for file_type in ("CCLF1", "CCLF3", "CCLF4", "CCLF7", "CCLFA"):
+        for file_type in ("CCLF1", "CCLF7", "CCLFA"):
             ids = [record["CUR_CLM_UNIQ_ID"] for record in self.records[file_type]]
             self.assertEqual(len(ids), len(set(ids)), file_type)
 
     def test_part_a_and_b_detail_files_cover_the_same_claims(self):
         header_ids = {record["CUR_CLM_UNIQ_ID"] for record in self.records["CCLF1"]}
-        for file_type in ("CCLF2", "CCLF3", "CCLF4", "CCLFA"):
+        for file_type in ("CCLF2", "CCLF4", "CCLFA"):
             ids = {record["CUR_CLM_UNIQ_ID"] for record in self.records[file_type]}
             self.assertEqual(ids, header_ids, file_type)
         part_b_lines = {(r["CUR_CLM_UNIQ_ID"], r["CLM_LINE_NUM"]) for r in self.records["CCLF5"]}
@@ -193,7 +198,9 @@ class OutputTest(unittest.TestCase):
             self.assertEqual(versions, {"0"}, file_type)
 
     def test_procedure_file_uses_procedure_codes(self):
-        valid = {code["code"] for code in procedure_codes() if code["ver"] == "0"}
+        reasons = list(CONDITIONS.values()) + ACUTE_EPISODES
+        valid = {code for reason in reasons for code in reason["proc"]["0"]}
+        self.assertTrue(self.records["CCLF3"])
         for r in self.records["CCLF3"]:
             self.assertIn(r["CLM_PRCDR_CD"].strip(), valid)
 
@@ -210,7 +217,8 @@ class OutputTest(unittest.TestCase):
 
     def test_beneficiary_demographics(self):
         records = self.records["CCLF8"]
-        self.assertEqual({r["BENE_SEX_CD"] for r in records}, {"0", "1", "2"})
+        self.assertLessEqual({r["BENE_SEX_CD"] for r in records}, {"0", "1", "2"})
+        self.assertLessEqual({"1", "2"}, {r["BENE_SEX_CD"] for r in records})
         counties = {}
         states = iter(fips_state_codes())
         for code in fips_county_codes():
@@ -274,7 +282,11 @@ class OutputTest(unittest.TestCase):
             for r in self.records[file_type]:
                 adjustment = types.setdefault(r["CUR_CLM_UNIQ_ID"], r["CLM_ADJSMT_TYPE_CD"])
                 self.assertEqual(adjustment, r["CLM_ADJSMT_TYPE_CD"], file_type)
-            self.assertEqual({a.strip() for a in types.values()}, {"0", "1", "2"}, file_type)
+            # DME is a small share of claims, so a run may not have every type.
+            found = {a.strip() for a in types.values()}
+            self.assertLessEqual(found, {"0", "1", "2"}, file_type)
+            if file_type == "CCLF5":
+                self.assertEqual(found, {"0", "1", "2"})
 
     def test_part_a_cancellations_net_against_their_originals(self):
         related = {}
@@ -289,9 +301,9 @@ class OutputTest(unittest.TestCase):
             for r in self.records[file_type]:
                 key = (r["CLM_CNTL_NUM"], r["BENE_MBI_ID"], r["CLM_LINE_NUM"])
                 related.setdefault(key, []).append(r)
-            self.check_cancellations(related, "CLM_LINE_CVRD_PD_AMT")
+            self.check_cancellations(related, "CLM_LINE_CVRD_PD_AMT", required=file_type == "CCLF5")
 
-    def check_cancellations(self, related, amount_field):
+    def check_cancellations(self, related, amount_field, required=True):
         cancellations = 0
         for records in related.values():
             by_type = {}
@@ -300,10 +312,14 @@ class OutputTest(unittest.TestCase):
             for cancellation in by_type.get("1", []):
                 cancellations += 1
                 self.assertIn("0", by_type)
-                original = by_type["0"][0]
-                self.assertEqual(float(cancellation[amount_field]), float(original[amount_field]))
-                self.assertLessEqual(original["CLM_EFCTV_DT"], cancellation["CLM_EFCTV_DT"])
-        self.assertTrue(cancellations)
+                # Separate visits can share a natural key, so one must match.
+                self.assertTrue(any(
+                    float(cancellation[amount_field]) == float(original[amount_field])
+                    and original["CLM_EFCTV_DT"] <= cancellation["CLM_EFCTV_DT"]
+                    for original in by_type["0"]
+                ))
+        if required:
+            self.assertTrue(cancellations)
 
     def test_part_a_files_share_the_natural_key(self):
         headers = {r["CUR_CLM_UNIQ_ID"]: r for r in self.records["CCLF1"]}
@@ -336,7 +352,7 @@ class OutputTest(unittest.TestCase):
         ids = set()
         for file_type in ("CCLF1", "CCLF5", "CCLF6", "CCLF7"):
             ids |= {r["CUR_CLM_UNIQ_ID"] for r in self.records[file_type]}
-        self.assertEqual(len(ids), 1000)
+        self.assertEqual(len(ids), 2000)
 
     def test_file_names_follow_the_conventions(self):
         ids = {}
@@ -377,13 +393,276 @@ class OutputTest(unittest.TestCase):
                     self.assertEqual(f.read().splitlines(), [r["_line"] for r in records], name)
 
 
+class CorrelationTest(GeneratedFilesTest):
+    """Checks that a patient's claims and codes relate to each other."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with open(os.path.join(cls.output, "cache", "beneficiaries.pkl"), "rb") as f:
+            cls.benes = pickle.load(f)
+        with open(os.path.join(cls.output, "cache", "providers.pkl"), "rb") as f:
+            cls.providers = pickle.load(f)
+        cls.headers = {r["CUR_CLM_UNIQ_ID"]: r for r in cls.records["CCLF1"]}
+
+    def patient_dx(self, mbi):
+        bene = self.benes[mbi]
+        return {
+            CONDITIONS[name]["dx"]["0"][index % len(CONDITIONS[name]["dx"]["0"])]
+            for name, index in bene["conditions"].items()
+        }
+
+    def test_values_are_in_the_reference_tables(self):
+        fields = [
+            ("CCLF1", "CLM_BILL_FAC_TYPE_CD", "claim_bill_facility_type"),
+            ("CCLF1", "CLM_BILL_CLSFCTN_CD", "claim_service_classification_type"),
+            ("CCLF1", "BENE_PTNT_STUS_CD", "ffs_patient_discharge"),
+            ("CCLF1", "CLM_OP_SRVC_TYPE_CD", "claim_outpatient_service_type"),
+            ("CCLF1", "CLM_ADMSN_TYPE_CD", "claim_admission_type"),
+            ("CCLF1", "CLM_ADMSN_SRC_CD", "claim_source_inpatient_admission"),
+            ("CCLF1", "CLM_BILL_FREQ_CD", "claim_frequency"),
+            ("CCLF1", "CLM_QUERY_CD", "claim_query"),
+            ("CCLF1", "CLM_MDCR_NPMT_RSN_CD", "reason_payment"),
+            ("CCLF1", "CLM_NCH_PRMRY_PYR_CD", "nhc_primary_payer"),
+            ("CCLF2", "CLM_LINE_PROD_REV_CTR_CD", "revenue_code"),
+            ("CCLF2", "HCPCS_1_MDFR_CD", "hcpcs_mod"),
+            ("CCLF4", "CLM_PROD_TYPE_CD", "claim_product_type"),
+            ("CCLF4", "CLM_POA_IND", "present_on_admission"),
+            ("CCLF5", "RNDRG_PRVDR_TYPE_CD", "rendering_provider_type"),
+            ("CCLF5", "CLM_PRVDR_SPCLTY_CD", "provider_specialty"),
+            ("CCLF5", "CLM_FED_TYPE_SRVC_CD", "type_service"),
+            ("CCLF5", "CLM_POS_CD", "place_of_service"),
+            ("CCLF5", "CLM_LINE_PRMRY_PYR_CD", "primary_payer"),
+            ("CCLF5", "CLM_CARR_PMT_DNL_CD", "carrier_payment_denial"),
+            ("CCLF5", "CLM_PRCSG_IND_CD", "processing_indicator"),
+            ("CCLF5", "CLM_DISP_CD", "claim_disposition"),
+            ("CCLF6", "CLM_FED_TYPE_SRVC_CD", "type_service"),
+            ("CCLF7", "PRVDR_SRVC_ID__QLFYR_CD", "provider_service_identifier_qualifier"),
+            ("CCLF7", "CLM_DSPNSNG_STUS_CD", "claim_dispensing"),
+            ("CCLF7", "CLM_DAW_PROD_SLCTN_CD", "daw_product_selection"),
+            ("CCLF7", "CLM_PHRMCY_SRVC_TYPE_CD", "pharmacy_service_type"),
+            ("CCLF8", "BENE_RACE_CD", "beneficiary_race"),
+            ("CCLF8", "BENE_MDCR_STUS_CD", "beneficiary_medicare_status"),
+            ("CCLF8", "BENE_DUAL_STUS_CD", "beneficiary_dual_status"),
+            ("CCLF8", "BENE_ORGNL_ENTLMT_RSN_CD", "beneficiary_original_entitlement_reason_code"),
+            ("CCLF8", "BENE_ENTLMT_BUYIN_IND", "beneficiary_entitlement_buy_in_indicator"),
+        ]
+        for file_type, field, module in fields:
+            valid = {str(code).strip() for code in importlib.import_module(module).get_codes()}
+            for r in self.records[file_type]:
+                value = r[field].strip()
+                if value:
+                    self.assertIn(value, valid, f"{file_type} {field}")
+
+    def test_principal_diagnosis_matches_across_files(self):
+        first = {r["CUR_CLM_UNIQ_ID"]: r for r in self.records["CCLF4"] if r["CLM_VAL_SQNC_NUM"] == "01"}
+        for claim_id, header in self.headers.items():
+            self.assertEqual(first[claim_id]["CLM_DGNS_CD"], header["PRNCPL_DGNS_CD"])
+
+    def test_secondary_diagnoses_are_the_patients_conditions(self):
+        for r in self.records["CCLF4"]:
+            if r["CLM_VAL_SQNC_NUM"] != "01":
+                self.assertIn(r["CLM_DGNS_CD"].strip(), self.patient_dx(r["BENE_MBI_ID"]))
+
+    def test_part_b_diagnoses_are_filled_from_the_first_slot(self):
+        for r in self.records["CCLF5"]:
+            self.assertEqual(r["CLM_LINE_DGNS_CD"].strip(), r["CLM_DGNS_1_CD"].strip())
+            slots = [r[f"CLM_DGNS_{i}_CD"].strip() for i in range(1, 13)]
+            used = [code for code in slots if code]
+            self.assertEqual(slots[:len(used)], used)
+
+    def test_conditions_fit_sex_and_age(self):
+        for bene in self.benes.values():
+            for name in bene["conditions"]:
+                condition = CONDITIONS[name]
+                self.assertEqual(condition.get("sex", bene["gender"]), bene["gender"], name)
+                self.assertGreaterEqual(int(bene["age"]) + 1, condition.get("min_age", 0), name)
+
+    def test_sex_specific_diagnoses_fit_the_patient(self):
+        for file_type, field in (("CCLF1", "PRNCPL_DGNS_CD"), ("CCLF4", "CLM_DGNS_CD"), ("CCLF5", "CLM_LINE_DGNS_CD")):
+            for r in self.records[file_type]:
+                code = r[field].strip()
+                sex = self.benes[r["BENE_MBI_ID"]]["gender"]
+                if code == "C61":
+                    self.assertEqual(sex, "1", file_type)
+                if code.startswith("C50"):
+                    self.assertEqual(sex, "2", file_type)
+
+    def test_only_inpatient_claims_have_inpatient_fields(self):
+        for r in self.headers.values():
+            inpatient = r["CLM_TYPE_CD"] in ("60", "61")
+            self.assertEqual(bool(r["DGNS_DRG_CD"].strip()), inpatient)
+            self.assertEqual(bool(r["ADMTG_DGNS_CD"].strip()), inpatient)
+            if r["CLM_TYPE_CD"] == "40":
+                self.assertEqual(r["CLM_ADMSN_TYPE_CD"].strip(), "")
+                self.assertEqual(r["CLM_ADMSN_SRC_CD"].strip(), "")
+            if not inpatient:
+                for field in ("CLM_OPRTNL_IME_AMT", "CLM_OPRTNL_DSPRPRTNT_AMT"):
+                    self.assertEqual(float(r[field]), 0)
+        for r in self.records["CCLF3"]:
+            self.assertIn(r["CLM_TYPE_CD"], ("60", "61"))
+        for r in self.records["CCLF4"]:
+            self.assertEqual(bool(r["CLM_POA_IND"].strip()), r["CLM_TYPE_CD"] in ("60", "61"))
+
+    def test_drg_and_procedure_fit_the_principal_diagnosis(self):
+        reasons = list(CONDITIONS.values()) + ACUTE_EPISODES
+        procedures = {r["CUR_CLM_UNIQ_ID"]: r["CLM_PRCDR_CD"].strip() for r in self.records["CCLF3"]}
+        inpatient = [r for r in self.headers.values() if r["DGNS_DRG_CD"].strip()]
+        self.assertTrue(inpatient)
+        for r in inpatient:
+            matches = [reason for reason in reasons if r["PRNCPL_DGNS_CD"].strip() in reason["dx"]["0"]]
+            self.assertTrue(matches)
+            self.assertTrue(any(r["DGNS_DRG_CD"].strip() in reason["drg"] for reason in matches))
+            if r["CUR_CLM_UNIQ_ID"] in procedures:
+                self.assertTrue(any(procedures[r["CUR_CLM_UNIQ_ID"]] in reason["proc"]["0"] for reason in matches))
+
+    def test_bill_type_follows_claim_type(self):
+        bill_types = {
+            "10": ("3", "2"), "20": ("2", "1"), "30": ("1", "8"), "40": ("1", "3"),
+            "50": ("8", "1"), "60": ("1", "1"), "61": ("1", "1"),
+        }
+        for r in self.headers.values():
+            self.assertEqual((r["CLM_BILL_FAC_TYPE_CD"], r["CLM_BILL_CLSFCTN_CD"]), bill_types[r["CLM_TYPE_CD"]])
+
+    def test_revenue_and_service_codes_follow_claim_type(self):
+        for r in self.records["CCLF2"]:
+            self.assertIn(r["CLM_LINE_PROD_REV_CTR_CD"], PART_A_RULES[r["CLM_TYPE_CD"]][4])
+            self.assertEqual(bool(r["CLM_LINE_HCPCS_CD"].strip()), r["CLM_TYPE_CD"] == "40")
+            if r["CLM_REV_APC_HIPPS_CD"].strip():
+                self.assertIn(r["CLM_TYPE_CD"], ("10", "20", "30"))
+        for r in self.records["CCLF5"]:
+            tos, betos, _, _ = SERVICES[r["CLM_LINE_HCPCS_CD"].strip()]
+            self.assertEqual(r["CLM_FED_TYPE_SRVC_CD"], tos)
+            self.assertEqual(r["HCPCS_BETOS_CD"], betos)
+        for r in self.records["CCLF6"]:
+            self.assertEqual(r["CLM_FED_TYPE_SRVC_CD"], DME_SERVICES[r["CLM_LINE_HCPCS_CD"].strip()][0])
+
+    def test_adjustment_codes_agree(self):
+        expected = {"0": ("1", "3"), "1": ("8", "0"), "2": ("7", "5")}
+        for r in self.headers.values():
+            self.assertEqual((r["CLM_BILL_FREQ_CD"], r["CLM_QUERY_CD"]), expected[r["CLM_ADJSMT_TYPE_CD"].strip()])
+        dispositions = {"0": "01", "1": "03", "2": "02"}
+        for r in self.records["CCLF5"]:
+            self.assertEqual(r["CLM_DISP_CD"], dispositions[r["CLM_ADJSMT_TYPE_CD"].strip()])
+
+    def test_hospice_claims_are_for_enrolled_patients(self):
+        claims = [r for r in self.headers.values() if r["CLM_TYPE_CD"] == "50"]
+        self.assertTrue(claims)
+        terminal = {code for c in CONDITIONS.values() if c.get("terminal") for code in c["dx"]["0"]}
+        for r in claims:
+            bene = self.benes[r["BENE_MBI_ID"]]
+            self.assertLessEqual(bene["hospice_bgn"], r["CLM_FROM_DT"])
+            self.assertNotEqual(bene["hospice_bgn"], "1000-01-01")
+            self.assertIn(r["PRNCPL_DGNS_CD"].strip(), terminal)
+
+    def test_medicare_status_follows_age_and_esrd(self):
+        for bene in self.benes.values():
+            age = int(bene["age"])
+            self.assertEqual(bene["mdcr_status"][0], "1" if age >= 65 else "2")
+            self.assertEqual(bene["mdcr_status"][1], "1" if "esrd" in bene["conditions"] else "0")
+
+    def test_discharge_status_reports_deaths_on_the_date_of_death(self):
+        expired = 0
+        for r in self.headers.values():
+            dod = self.benes[r["BENE_MBI_ID"]]["dod"]
+            if r["BENE_PTNT_STUS_CD"].strip() in ("20", "40"):
+                expired += 1
+                self.assertEqual(r["CLM_THRU_DT"], dod)
+            elif r["CLM_THRU_DT"] == dod:
+                self.fail(r["CUR_CLM_UNIQ_ID"])
+        self.assertTrue(expired)
+
+    def test_part_d_drugs_are_the_patients_regular_drugs(self):
+        seen = set()
+        for r in self.records["CCLF7"]:
+            ndc = r["CLM_LINE_NDC_CD"].strip()
+            if not ndc:
+                continue
+            valid = {DRUG_NDCS[drug] for drug in self.benes[r["BENE_MBI_ID"]]["drugs"]}
+            self.assertIn(ndc, valid)
+            self.assertNotIn((r["BENE_MBI_ID"], ndc), seen)
+            seen.add((r["BENE_MBI_ID"], ndc))
+
+    def test_every_drug_comes_from_a_condition(self):
+        for bene in self.benes.values():
+            valid = {drug for name in bene["conditions"] for drug in CONDITIONS[name]["drugs"]}
+            self.assertLessEqual(set(bene["drugs"]), valid)
+
+    def test_dme_claims_fit_the_patients_conditions(self):
+        for r in self.records["CCLF6"]:
+            valid = {code for name in self.benes[r["BENE_MBI_ID"]]["conditions"] for code in CONDITIONS[name]["dme"]}
+            self.assertIn(r["CLM_LINE_HCPCS_CD"].strip(), valid)
+
+    def test_care_is_local(self):
+        total = local = 0
+        for r in self.headers.values():
+            total += 1
+            local += r["PRVDR_FAC_FIPS_ST_CD"] == self.benes[r["BENE_MBI_ID"]]["fips_state"]
+        self.assertGreater(local / total, 0.9)
+
+    def test_patients_keep_a_regular_doctor(self):
+        pcp_visits = 0
+        for r in self.records["CCLF5"]:
+            bene = self.benes[r["BENE_MBI_ID"]]
+            self.assertEqual(r["CLM_RFRG_PRVDR_NPI_NUM"], bene["pcp"])
+            self.assertIn(r["CLM_RNDRG_PRVDR_NPI_NUM"], [bene["pcp"], *bene["specialists"].values()])
+            pcp_visits += r["CLM_RNDRG_PRVDR_NPI_NUM"] == bene["pcp"]
+        self.assertGreater(pcp_visits / len(self.records["CCLF5"]), 0.5)
+
+    def test_provider_specialty_matches_role(self):
+        for bene in self.benes.values():
+            for specialty, npi in bene["specialists"].items():
+                self.assertEqual(self.providers[npi]["role"], "specialist")
+                self.assertEqual(self.providers[npi]["psc"], specialty)
+
+    def test_utilization_is_skewed_toward_sicker_patients(self):
+        counts = dict.fromkeys(self.benes, 0)
+        for file_type in ("CCLF1", "CCLF7"):
+            for r in self.records[file_type]:
+                counts[r["BENE_MBI_ID"]] += 1
+        for file_type in ("CCLF5", "CCLF6"):
+            seen = {(r["CUR_CLM_UNIQ_ID"], r["BENE_MBI_ID"]) for r in self.records[file_type]}
+            for _, mbi in seen:
+                counts[mbi] += 1
+        ordered = sorted(counts.values(), reverse=True)
+        self.assertGreater(sum(ordered[:len(ordered) // 10]) / sum(ordered), 0.3)
+        self.assertLess(statistics.median(ordered), statistics.mean(ordered))
+        self.assertLessEqual(ordered[0], 50)
+        healthy = [counts[m] for m, b in self.benes.items() if not b["conditions"]]
+        sick = [counts[m] for m, b in self.benes.items() if len(b["conditions"]) >= 3]
+        self.assertGreater(statistics.mean(sick), 2 * statistics.mean(healthy))
+
+    def test_part_a_lines_add_up_to_the_claim(self):
+        totals = {}
+        for r in self.records["CCLF2"]:
+            totals[r["CUR_CLM_UNIQ_ID"]] = totals.get(r["CUR_CLM_UNIQ_ID"], 0) + float(r["CLM_LINE_CVRD_PD_AMT"])
+        for claim_id, header in self.headers.items():
+            self.assertAlmostEqual(totals[claim_id], float(header["CLM_PMT_AMT"]), places=2)
+
+    def test_amounts_are_ordered(self):
+        for r in self.records["CCLF5"]:
+            self.assertGreaterEqual(float(r["CLM_LINE_ALOWD_CHRG_AMT"]), float(r["CLM_LINE_CVRD_PD_AMT"]))
+        for r in self.headers.values():
+            self.assertGreaterEqual(float(r["CLM_MDCR_INSTNL_TOT_CHRG_AMT"]), float(r["CLM_PMT_AMT"]))
+
+    def test_no_excluded_substance_abuse_codes(self):
+        reasons = list(CONDITIONS.values()) + ACUTE_EPISODES
+        for reason in reasons:
+            for code in reason["dx"]["0"]:
+                self.assertNotRegex(code, r"^F1[0-9]")
+            for code in reason["dx"]["9"]:
+                self.assertNotRegex(code, r"^(291|292|303|304|305)")
+            self.assertFalse(set(reason["drg"]) & {"522", "523", "895", "896", "897"})
+
+
 class RelatedClaimsTest(unittest.TestCase):
     def test_related_claims_do_not_exceed_the_quantity(self):
         claims = []
         with mock.patch.multiple(caches, claims=claims, cancellation_rate=1, readjustment_rate=1, first_claim_weights=[1, 0],
-                                 family_weights={"A": 1}, beneficiaries={}, providers={}):
-            caches.generate_beneficiaries(5, 2024, 8)
+                                 family_weights={"A": 1}, beneficiaries={}, providers={}, provider_pools={}, market_states=[]):
+            caches.choose_market()
             caches.generate_providers(5)
+            caches.generate_beneficiaries(5, 2024, 8)
             caches.generate_claims(2, 2024, 8)
         self.assertEqual([claim["adj"] for claim in claims], ["0", "1"])
 
@@ -421,6 +700,33 @@ class RunTest(unittest.TestCase):
         generate(project, seed=1)
         for name in os.listdir(os.path.join(project, "_output", "250101", "CCLF1")):
             self.assertRegex(name, r"\.ZC1[YR]24\.D250101\.")
+
+    def test_small_populations_generate_files(self):
+        project = os.path.join(self.temp, "project")
+        copy_project(project)
+        subprocess.run(
+            [sys.executable, "main.py", "--seed", "1", "--beneficiaries", "1", "--providers", "1", "--claims", "3"],
+            cwd=project, check=True, capture_output=True,
+        )
+        self.assertTrue(os.path.exists(os.path.join(project, "_output", "240901", "CCLF0")))
+
+    def test_claims_before_icd10_use_icd9_codes(self):
+        project = os.path.join(self.temp, "project")
+        copy_project(project)
+        path = os.path.join(project, "main.py")
+        with open(path) as f:
+            source = f.read()
+        self.assertIn("claims_year = 2024\n", source)
+        with open(path, "w") as f:
+            f.write(source.replace("claims_year = 2024\n", "claims_year = 2014\n"))
+        generate(project, seed=1)
+        layout = {name: (start, end) for name, start, end, _ in LAYOUTS["CCLF1"]}
+        icd9 = {code for reason in list(CONDITIONS.values()) + ACUTE_EPISODES + [ROUTINE_VISIT] for code in reason["dx"]["9"]}
+        with open(os.path.join(project, "_output", "cache", "CCLF1.txt")) as f:
+            for line in f:
+                start, end = layout["PRNCPL_DGNS_CD"]
+                self.assertIn(line[start - 1:end].strip(), icd9)
+                self.assertEqual(line[layout["DGNS_PRCDR_ICD_IND"][0] - 1], "9")
 
     def test_main_fails_when_a_script_fails(self):
         project = os.path.join(self.temp, "project")

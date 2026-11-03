@@ -1,11 +1,9 @@
-import random
 import sys
 
 # Add the path of the folder where the module is located
 sys.path.append("./utils/")
-from utils import dol, get_file_date, open_cache_file, print_progress, replicate_files
+from utils import get_file_date, open_cache_file, print_progress, replicate_files
 from utils import get_claims, get_prov
-from utils import revcd, hcpcs, flt, hcpcsm, hipps
 
 file_date = get_file_date()
 
@@ -36,25 +34,25 @@ with open_cache_file("CCLF2") as f:
             line += claim["ctc"]                    # CLM_TYPE_CD
             line += claim_line["from_dt"]               # CLM_LINE_FROM_DT
             line += claim_line["thru_dt"]               # CLM_LINE_THRU_DT
-            line += random.choice(revcd()).rjust(4)     # CLM_LINE_PROD_REV_CTR_CD
+            line += claim_line["rev"].rjust(4)          # CLM_LINE_PROD_REV_CTR_CD
             line += claim_line["thru_dt"]               # CLM_LINE_INSTNL_REV_CTR_DT   
-            line += random.choice(hcpcs())              # CLM_LINE_HCPCS_CD
+            line += claim_line["hcpcs"].ljust(5)        # CLM_LINE_HCPCS_CD
     
             # 11-20
             line += "".ljust(11)                        # BENE_EQTBL_BIC_HICN_NUM
             line += prov["oscar"].ljust(6)              # PRVDR_OSCAR_NUM
             line += claim["from_dt"]                    # CLM_FROM_DT
             line += claim["thru_dt"]                    # CLM_THRU_DT       
-            line += flt().rjust(24)                     # CLM_LINE_SRVC_UNIT_QTY
-            line += dol().rjust(17)                     # CLM_LINE_CVRD_PD_AMT
-            line += random.choice(hcpcsm())             # HCPCS_1_MDFR_CD
-            line += random.choice(hcpcsm())             # HCPCS_2_MDFR_CD
-            line += random.choice(hcpcsm())             # HCPCS_3_MDFR_CD
-            line += random.choice(hcpcsm())             # HCPCS_4_MDFR_CD
+            line += claim_line["units"].rjust(24)       # CLM_LINE_SRVC_UNIT_QTY
+            line += claim_line["pd_amt"].rjust(17)      # CLM_LINE_CVRD_PD_AMT
+            line += claim_line["mdfr"].ljust(2)         # HCPCS_1_MDFR_CD
+            line += "".ljust(2)                         # HCPCS_2_MDFR_CD
+            line += "".ljust(2)                         # HCPCS_3_MDFR_CD
+            line += "".ljust(2)                         # HCPCS_4_MDFR_CD
 
             # 21-23
-            line += random.choice(hcpcsm())             # HCPCS_5_MDFR_CD
-            line += random.choice(hipps()).rjust(5)     # CLM_REV_APC_HIPPS_CD
+            line += "".ljust(2)                         # HCPCS_5_MDFR_CD
+            line += claim_line["hipps"].rjust(5)        # CLM_REV_APC_HIPPS_CD
             line += prov["oscar"].ljust(20)             # CLM_FAC_PRVDR_OSCAR_NUM
 
             line += "\n"

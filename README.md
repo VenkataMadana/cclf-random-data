@@ -57,6 +57,15 @@ Each claim belongs to one family and is only written to that family's files:
 | DME | 81, 82 | CCLF6 |
 | Part D | 01, 02, 03 | CCLF7 |
 
+Patients are consistent across their claims. Each has an age, sex, and home
+state, a set of conditions that fit their age and sex, regular drugs, and a care
+team of local providers. Each claim is for one of the patient's conditions, or
+for an acute or routine reason, and its diagnoses, DRG, procedures, services,
+and drugs follow from that reason. Sicker patients have more claims. Field values
+such as DRGs, bill types, and revenue centers follow from the claim type. The
+clinical codes are in `utils/reference/clinical.py`. This data is plausible, but
+it is not statistically matched to real Medicare populations.
+
 Files are dated the first of the month after the claims, and are written to
 `_output/<yymmdd>`.
 

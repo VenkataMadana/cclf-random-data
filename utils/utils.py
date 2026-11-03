@@ -10,50 +10,21 @@ sys.path.append("./utils/reference")
 from faker import Faker
 from functools import lru_cache
 
-from beneficiary_dual_status import get_codes as bdsc_get_codes
-from beneficiary_entitlement_buy_in_indicator import get_codes as bebi_get_codes
-from beneficiary_medicare_status import get_codes as bmcsc_get_codes
-from beneficiary_original_entitlement_reason_code import get_codes as beorcc_get_codes
-from beneficiary_race import get_codes as brc_get_codes
-from betos import get_codes as betos_get_codes
-from carrier_payment_denial import get_codes as cpd_get_codes
-from claim_admission_type  import get_codes as actc_get_codes
-from claim_bill_facility_type import get_codes as cbfc_get_codes
-from claim_dispensing import get_codes as cdsc_get_codes
-from claim_disposition import get_codes as cdc_get_codes
-from claim_frequency import get_codes as cfc_get_codes
-from claim_outpatient_service_type import get_codes as cosc_get_codes
 from ansi_group import get_codes as ansi_group_get_codes
 from ansi_reason import get_codes as ansi_reason_get_codes
-from claim_product_type import get_codes as ptc_get_codes
-from claim_query import get_codes as cqc_get_codes
 from claim_related_condition import get_codes as crc_get_codes
-from claim_service_classification_type import get_codes as csc_get_codes
-from claim_source_inpatient_admission import get_codes as csaic_get_codes
 from claim_type import get_codes as ctc_get_codes
 from daw_product_selection import get_codes as daw_get_codes
-from drg import get_codes as drg_get_codes
-from ffs_patient_discharge import get_codes as ffs_get_codes
 from fips_county import get_codes as fips_county_get_codes
 from fips_state import get_codes as fips_state_get_codes, get_abbreviations as fips_abbr_get_codes
-from hcpcs import get_codes as hcpcs_get_codes
 from hcpcs_mod import get_codes as hcpcs_mod_get_codes
 from hipps import get_codes as hipps_get_codes
 from hpsa_scarcity import get_codes as hpsa_get_codes
-from icd import get_codes as icd_get_codes
-from icd_procedure import get_codes as icd_procedure_get_codes
 from nhc_primary_payer import get_codes as nhc_get_codes
-from pharmacy_service_type import get_codes as pstc_get_codes
 from place_of_service import get_codes as pos_get_codes
-from present_on_admission import get_codes as poa_get_codes
 from primary_payer import get_codes as ppc_get_codes
-from processing_indicator import get_codes as pic_get_codes
-from provider_service_identifier_qualifier import get_codes as psiqc_get_codes
 from provider_specialty import get_codes as psc_get_codes
 from reason_payment import get_codes as rpc_get_codes
-from rendering_provider_type import get_codes as rptc_get_codes
-from revenue_code import get_codes as revo_get_codes
-from type_service import get_codes as tsc_get_codes
 
 faker = Faker()
 
@@ -189,33 +160,6 @@ def fips_counties_by_state():
             counties[state].append(code)
     return counties
 
-def bdsc():
-    return bdsc_get_codes()
-
-def bebi():
-    return bebi_get_codes()
-
-def bmsc():
-    return bmcsc_get_codes()
-
-def beorcc():
-    return beorcc_get_codes()
-
-def brc():
-    return brc_get_codes()
-
-# Claim Admission Type Codes
-def atc():
-    return actc_get_codes()
-
-# Claim Bill Facility Type Codes
-def cbfc():
-    return cbfc_get_codes()
-
-# Claim Outpatient Service Type Codes
-def cosc():
-    return cosc_get_codes()
-
 # Claim Service Classification Type Codes
 def ctc():
     return ctc_get_codes()
@@ -224,46 +168,9 @@ def ctc():
 def nprc():
     return rpc_get_codes()
 
-# Claim Service Classification Type Codes
-def csc():
-    return csc_get_codes()
-
 # NCH Primary Payer Code (if not Medicare)
 def nhc():
     return nhc_get_codes()
-
-# FFS Patient Discharge Code
-def ffs():
-    return ffs_get_codes()
-
-# ICD diagnosis codes for a version indicator: 9 = ICD-9, 0 = ICD-10.
-@lru_cache(maxsize=None)
-def icd(ver):
-    return [code for code in icd_get_codes() if code["ver"] == ver]
-
-# ICD procedure codes for a version indicator: 9 = ICD-9, 0 = ICD-10.
-@lru_cache(maxsize=None)
-def pcs(ver):
-    return [code for code in icd_procedure_get_codes() if code["ver"] == ver]
-
-# CMS DRG / MSDRG Codes
-def drg():
-    return drg_get_codes()
-
-def csaic():
-    return csaic_get_codes()
-
-def cfc():
-    return cfc_get_codes()
-
-def cqc():
-    return cqc_get_codes()
-
-def revcd():
-    return revo_get_codes()
-
-def hcpcs():
-    return hcpcs_get_codes()
 
 def hcpcsm():
     return hcpcs_mod_get_codes()
@@ -271,23 +178,8 @@ def hcpcsm():
 def hipps():
     return hipps_get_codes()
 
-def cptc():
-    return ptc_get_codes()
-
-def poa():
-    return poa_get_codes()
-
-def rpt():
-    return rptc_get_codes()
-
 def psc():
     return psc_get_codes()
-
-def tsc():
-    return tsc_get_codes()
-
-def betos():
-    return betos_get_codes()
 
 def pos():
     return pos_get_codes()
@@ -295,40 +187,18 @@ def pos():
 def ppc():
     return ppc_get_codes()
 
-def cdc():
-    return cdc_get_codes()
-
 # Returns a current numberic following the pattern (-)#.##.
 def dol():
     return f"{random.uniform(-99, 9999):.2f}"
 
-# Returns a float following the pattern #.####.
-def flt():
-    return f"{random.uniform(0, 9999):.4f}"
-
-def cpd():
-    return cpd_get_codes()
-
-def pic():
-    return pic_get_codes()
-
 def ndc():
     return faker.numerify("###########")
-
-def psiqc():
-    return psiqc_get_codes()
-
-def cdsc():
-    return cdsc_get_codes()
 
 def daw():
     return daw_get_codes()
 
 def rint():
     return str(random.randint(1, 365))
-
-def pstc():
-    return pstc_get_codes()
 
 def ynb():
     return random.choice(["Y", "N", " "])
@@ -347,6 +217,19 @@ def ansi_group():
 
 def hpsa():
     return hpsa_get_codes()
+
+# Returns a claim's diagnosis in one of the 12 slots on a Part B record.
+def dgns_slot(claim, index):
+    diagnoses = claim["dgns"]
+    return (diagnoses[index] if index < len(diagnoses) else "").ljust(7)
+
+
+# Returns an inpatient-only amount, which is a small share of the claim's payment.
+def pps_amt(claim):
+    if claim["ctc"] in ("60", "61"):
+        return f"{random.uniform(0, float(claim['pmt_amt']) * 0.05):.2f}"
+    return "0.00"
+
 
 # Returns the file date passed by main, or today when run directly.
 def get_file_date():

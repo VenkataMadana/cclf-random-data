@@ -1,11 +1,9 @@
-import random
 import sys
 
 # Add the path of the folder where the module is located
 sys.path.append("./utils/")
 from utils import get_file_date, open_cache_file, print_progress, replicate_files
 from utils import get_beneficiaries
-from utils import bmsc, bdsc, beorcc, bebi
 
 file_date = get_file_date()
 
@@ -35,18 +33,18 @@ with open_cache_file("CCLF8") as f:
         line += bene["gender"]                  # BENE_SEX_CD  
         line += bene["race"]                    # BENE_RACE_CD
         line += bene["age"].zfill(3)            # BENE_AGE
-        line += random.choice(bmsc())           # BENE_MDCR_STUS_CD
+        line += bene["mdcr_status"]             # BENE_MDCR_STUS_CD
 
         # 11-20
-        line += random.choice(bdsc())           # BENE_DUAL_STUS_CD
+        line += bene["dual"]                    # BENE_DUAL_STUS_CD
         line += bene["dod"]                     # BENE_DEATH_DT
         line += bene["hospice_bgn"]             # BENE_RNG_BGN_DT
         line += bene["hospice_end"]             # BENE_RNG_END_DT
         line += bene["firstName"].ljust(30)     # BENE_1ST_NAME
         line += bene["middleName"].ljust(15)    # BENE_MIDL_NAME
         line += bene["lastName"].ljust(40)      # BENE_LAST_NAME
-        line += random.choice(beorcc())         # BENE_ORGNL_ENTLMT_RSN_CD
-        line += random.choice(bebi())           # BENE_ENTLMT_BUYIN_IND
+        line += bene["orig_reason"]             # BENE_ORGNL_ENTLMT_RSN_CD
+        line += bene["buyin"]                   # BENE_ENTLMT_BUYIN_IND
         line += bene["part_a_bgn"]              # BENE_PART_A_ENRLMT_BGN_DT
 
         # # 21-30

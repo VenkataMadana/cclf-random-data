@@ -12,7 +12,7 @@ from caches import cache_all
 
 # Specifies the total population size of beneficiaries that can be randomly
 # chosen and used to generate files.
-number_of_beneficiaries = 1000
+number_of_beneficiaries = 2500
 
 # Specifies the total population size of providers that can be randomly
 # chosen and used to generate files.
