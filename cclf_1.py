@@ -10,7 +10,7 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import replicate_files, dol
 from utils import get_claims, get_bene, get_prov
-from utils import icd, ctc, nprc, cbfc, csc, nhc, ffs, drg, cosc, cat, atc, csaic, cfc, cqc, dt
+from utils import icd, nprc, cbfc, csc, nhc, ffs, drg, cosc, cat, atc, csaic, cfc, cqc
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -29,7 +29,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("A")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -57,14 +57,14 @@ with open(f"{directory}/{file_name}", "w") as f:
         line += claim["thru_dt"]                    # CLM_THRU_DT
         line += random.choice(cbfc())               # CLM_BILL_FAC_TYPE_CD
         line += random.choice(csc())                # CLM_BILL_CLSFCTN_CD
-        line += random.choice(icd())["code"].rjust(7)     # PRNCPL_DGNS_CD
+        line += random.choice(icd(claim["icd_ver"]))["code"].rjust(7)     # PRNCPL_DGNS_CD
 
-        11-20
-        line += random.choice(icd())["code"].rjust(7)     # ADMTG_DGNS_CD
+        # 11-20
+        line += random.choice(icd(claim["icd_ver"]))["code"].rjust(7)     # ADMTG_DGNS_CD
         line += random.choice(nprc()).ljust(2)      # CLM_MDCR_NPMT_RSN_CD
         line += dol().rjust(17)                     # CLM_PMT_AMT
         line += random.choice(nhc())                # CLM_NCH_PRMRY_PYR_CD
-        line += faker.state_abbr()                  # PRVDR_FAC_FIPS_ST_CD  
+        line += prov["fips_state"]                  # PRVDR_FAC_FIPS_ST_CD  
         line += random.choice(ffs()).ljust(2)       # BENE_PTNT_STUS_CD 
         line += random.choice(drg()).ljust(4)       # DGNS_DRG_CD
         line += random.choice(cosc())               # CLM_OP_SRVC_TYPE_CD
@@ -84,7 +84,7 @@ with open(f"{directory}/{file_name}", "w") as f:
         line += random.choice(cqc())                # CLM_QUERY_CD
 
         # 31-40
-        line += random.choice(icd())["ver"]         # DGNS_PRCDR_ICD_IND
+        line += claim["icd_ver"]                    # DGNS_PRCDR_ICD_IND
         line += dol().rjust(15)                     # CLM_MDCR_INSTNL_TOT_CHRG_AMT
         line += dol().rjust(15)                     # CLM_MDCR_IP_PPS_CPTL_IME_AMT
         line += dol().rjust(22)                     # CLM_OPRTNL_IME_AMT
@@ -100,7 +100,7 @@ with open(f"{directory}/{file_name}", "w") as f:
         line += prov["npi"]                         # CLM_OTHR_PRVDR_NPI_NUM
         line += claim["ccn"].rjust(40)              # CLM_CNTL_NUM
         line += claim["ocn"].rjust(40)              # CLM_ORG_CNTL_NUM
-        line += claim["mac"]                        # CLM_ORG_CNTL_NUM
+        line += claim["mac"]                        # CLM_CNTRCTR_NUM
         
         line += "\n"
 

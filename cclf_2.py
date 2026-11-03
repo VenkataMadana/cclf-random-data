@@ -8,9 +8,9 @@ faker = Faker()
 
 # Add the path of the folder where the module is located
 sys.path.append("./utils/")
-from utils import replicate_files
+from utils import dol, replicate_files
 from utils import get_claims, get_bene, get_prov
-from utils import ctc, revcd, dt, hcpcs, flt, hcpcsm, hipps
+from utils import revcd, hcpcs, flt, hcpcsm, hipps
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -28,7 +28,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("A")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -51,10 +51,10 @@ with open(f"{directory}/{file_name}", "w") as f:
 
             # 1-10
             line += claim["num"].ljust(13)              # CUR_CLM_UNIQ_ID
-            line += claim_line["ln"].rjust(10)          # CLM_LINE_NUM
+            line += claim_line["ln"].zfill(10)          # CLM_LINE_NUM
             line += claim["mbi"]                        # BENE_MBI_ID
             line += "".ljust(11)                        # BENE_HIC_NUM
-            line += random.choice(ctc()).rjust(2)       # CLM_TYPE_CD
+            line += claim["ctc"]                    # CLM_TYPE_CD
             line += claim_line["from_dt"]               # CLM_LINE_FROM_DT
             line += claim_line["thru_dt"]               # CLM_LINE_THRU_DT
             line += random.choice(revcd()).rjust(4)     # CLM_LINE_PROD_REV_CTR_CD
@@ -67,7 +67,7 @@ with open(f"{directory}/{file_name}", "w") as f:
             line += claim["from_dt"]                    # CLM_FROM_DT
             line += claim["thru_dt"]                    # CLM_THRU_DT       
             line += flt().rjust(24)                     # CLM_LINE_SRVC_UNIT_QTY
-            line += flt().rjust(17)                     # CLM_LINE_CVRD_PD_AMT
+            line += dol().rjust(17)                     # CLM_LINE_CVRD_PD_AMT
             line += random.choice(hcpcsm())             # HCPCS_1_MDFR_CD
             line += random.choice(hcpcsm())             # HCPCS_2_MDFR_CD
             line += random.choice(hcpcsm())             # HCPCS_3_MDFR_CD

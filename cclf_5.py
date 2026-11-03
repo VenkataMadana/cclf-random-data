@@ -10,7 +10,7 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import dol, replicate_files
 from utils import get_claims, get_bene, get_prov
-from utils import ctc, rpt, tsc, pos, hcpcs, ppc, icd, cpd, pic, cat, flt, hcpcsm, cdc, tsc
+from utils import rpt, tsc, pos, hcpcs, ppc, icd, cpd, pic, cat, flt, hcpcsm, cdc, tsc
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -28,7 +28,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("B")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -48,18 +48,18 @@ with open(f"{directory}/{file_name}", "w") as f:
             line = ""
             bene = get_bene(claim["mbi"])
             prov = get_prov(claim["npi"])
-            diag = random.choice(icd())
+            diag = random.choice(icd(claim["icd_ver"]))
 
             # 1-10
             line += claim["num"].ljust(13)                  # CUR_CLM_UNIQ_ID
-            line += claim_line["ln"].rjust(10)              # CLM_LINE_NUM
+            line += claim_line["ln"].zfill(10)              # CLM_LINE_NUM
             line += claim["mbi"]                            # BENE_MBI_ID
             line += "".ljust(11)                            # BENE_HIC_NUM
-            line += random.choice(ctc()).ljust(2)           # CLM_TYPE_CD
+            line += claim["ctc"]                            # CLM_TYPE_CD
             line += claim["from_dt"]                        # CLM_FROM_DT
             line += claim["thru_dt"]                        # CLM_THRU_DT
             line += random.choice(rpt()).ljust(3)           # RNDRG_PRVDR_TYPE_CD
-            line += prov["state"]                           # RNDRG_PRVDR_FIPS_ST_CD
+            line += prov["fips_state"]                      # RNDRG_PRVDR_FIPS_ST_CD
             line += prov["psc"]                             # CLM_PRVDR_SPCLTY_CD
 
             # 11-20
@@ -69,7 +69,7 @@ with open(f"{directory}/{file_name}", "w") as f:
             line += claim_line["thru_dt"]                   # CLM_LINE_THRU_DT    
             line += random.choice(hcpcs())                  # CLM_LINE_HCPCS_CD  
             line += str(dol()).rjust(15)                    # CLM_LINE_CVRD_PD_AMT
-            line += random.choice(ppc()).ljust(1)           # CLM_LINE_PRMRY_PYR_CD ???
+            line += random.choice(ppc()).ljust(1)           # CLM_LINE_PRMRY_PYR_CD
             line += diag["code"].rjust(7)                   # CLM_LINE_DGNS_CD
             line += prov["ein"].rjust(10)                   # CLM_RNDRG_PRVDR_TAX_NUM
             line += prov["npi"]                             # RNDRG_PRVDR_NPI_NUM
@@ -82,7 +82,7 @@ with open(f"{directory}/{file_name}", "w") as f:
             line += claim["thru_dt"]                        # CLM_IDR_LD_DT
             line += claim["ccn"].rjust(40)                  # CLM_CNTL_NUM
             line += "".ljust(11)                            # BENE_EQTBL_BIC_HICN_NUM
-            line += str(dol()).rjust(17)                    # CLM_LINE_ALOWD_CHRG_AMT ???
+            line += str(dol()).rjust(17)                    # CLM_LINE_ALOWD_CHRG_AMT
             line += str(flt()).rjust(24)                    # CLM_LINE_SRVC_UNIT_QTY
             line += random.choice(hcpcsm())                 # HCPCS_1_MDFR_CD
 
@@ -92,21 +92,21 @@ with open(f"{directory}/{file_name}", "w") as f:
             line += random.choice(hcpcsm())                 # HCPCS_4_MDFR_CD
             line += random.choice(hcpcsm())                 # HCPCS_5_MDFR_CD
             line += random.choice(cdc())                    # CLM_DISP_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_1_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_2_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_3_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_4_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_5_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_1_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_2_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_3_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_4_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_5_CD
 
             # #41-50
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_6_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_7_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_8_CD
-            line += random.choice(icd())["ver"]             # DGNS_PRCDR_ICD_IND
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_9_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_10_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_11_CD
-            line += random.choice(icd())["code"].ljust(7)   # CLM_DGNS_12_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_6_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_7_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_8_CD
+            line += claim["icd_ver"]                        # DGNS_PRCDR_ICD_IND
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_9_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_10_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_11_CD
+            line += random.choice(icd(claim["icd_ver"]))["code"].ljust(7)   # CLM_DGNS_12_CD
             line += random.choice(tsc()).ljust(3)           # HCPCS_BETOS_CD
             line += prov["npi"].ljust(10)                   # CLM_RNDRG_PRVDR_NPI_NUM
 

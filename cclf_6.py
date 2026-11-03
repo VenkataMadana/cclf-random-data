@@ -10,7 +10,7 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import dol, replicate_files
 from utils import get_claims, get_bene, get_prov
-from utils import ctc, tsc, pos, hcpcs, ppc, cpd, pic, cat, cdc, tsc
+from utils import tsc, pos, hcpcs, ppc, cpd, pic, cat, cdc, tsc
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -28,7 +28,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("DME")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -51,10 +51,10 @@ with open(f"{directory}/{file_name}", "w") as f:
 
             # 1-10
             line += claim["num"].ljust(13)          # CUR_CLM_UNIQ_ID
-            line += claim_line["ln"].rjust(10)      # CLM_LINE_NUM
+            line += claim_line["ln"].zfill(10)      # CLM_LINE_NUM
             line += claim["mbi"]                    # BENE_MBI_ID
             line += "".ljust(11)                    # BENE_HIC_NUM
-            line += random.choice(ctc()).ljust(2)   # CLM_TYPE_CD
+            line += claim["ctc"]                    # CLM_TYPE_CD
             line += claim["from_dt"]                # CLM_FROM_DT
             line += claim["thru_dt"]                # CLM_THRU_DT
             line += random.choice(tsc())            # CLM_FED_TYPE_SRVC_CD

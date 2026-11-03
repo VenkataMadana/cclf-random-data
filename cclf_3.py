@@ -10,7 +10,7 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import replicate_files
 from utils import get_claims, get_bene, get_prov
-from utils import ctc, icd
+from utils import pcs
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -28,7 +28,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("A")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -45,15 +45,15 @@ with open(f"{directory}/{file_name}", "w") as f:
         line = ""
         bene = get_bene(claim["mbi"])
         prov = get_prov(claim["npi"])
-        diag = random.choice(icd())
+        proc = random.choice(pcs(claim["icd_ver"]))
 
         # 1-10
         line += claim["num"].ljust(13)          # CUR_CLM_UNIQ_ID
         line += claim["mbi"]                    # BENE_MBI_ID
         line += "".ljust(11)                    # BENE_HIC_NUM
-        line += random.choice(ctc()).rjust(2)   # CLM_TYPE_CD
-        line += "1".rjust(2)                    # CLM_VAL_SQNC_NUM
-        line += diag["code"].rjust(7)           # CLM_PRCDR_CD
+        line += claim["ctc"]                    # CLM_TYPE_CD
+        line += "01"                            # CLM_VAL_SQNC_NUM
+        line += proc["code"].rjust(7)           # CLM_PRCDR_CD
         line += claim["from_dt"]                # CLM_PRCDR_PRFRM_DT
         line += "".ljust(11)                    # BENE_EQTBL_BIC_HICN_NUM
         line += prov["oscar"].ljust(6)          # PRVDR_OSCAR_NUM
@@ -61,8 +61,8 @@ with open(f"{directory}/{file_name}", "w") as f:
 
         # 11-13
         line += claim["thru_dt"]                # CLM_THRU_DT   
-        line += diag["ver"]                     # DGNS_PRCDR_ICD_IND
-        line += prov["fnpi"].rjust(20)          # CLM_BLG_PRVDR_OSCAR_NUM
+        line += proc["ver"]                     # DGNS_PRCDR_ICD_IND
+        line += prov["oscar"].rjust(20)         # CLM_BLG_PRVDR_OSCAR_NUM
         line += "\n"
 
         f.write(line)  

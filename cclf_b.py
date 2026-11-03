@@ -10,7 +10,7 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import replicate_files, dol
 from utils import get_claims, get_bene, get_prov
-from utils import ynb, ctc, twobyte
+from utils import ynb, twobyte, hpsa
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -28,7 +28,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("B")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -51,10 +51,10 @@ with open(f"{directory}/{file_name}", "w") as f:
             
             # 1-10
             line += claim["num"].ljust(13)          # CUR_CLM_UNIQ_ID
-            line += claim_line["ln"].rjust(10)      # CLM_LINE_NUM
+            line += claim_line["ln"].zfill(10)      # CLM_LINE_NUM
             line += bene["mbi"]                     # BENE_MBI_ID
             line += bene["hic"].ljust(11)           # BENE_HIC_NUM
-            line += random.choice(ctc()).ljust(2)   # CLM_TYPE_CD
+            line += claim["ctc"]                    # CLM_TYPE_CD
             line += ynb()                           # CLM_LINE_NGACO_PBPMT_SW
             line += ynb()                           # CLM_LINE_NGACO_PDSCHRG_HCBS_SW
             line += ynb()                           # CLM_LINE_NGACO_SNF_WVR_SW
@@ -74,7 +74,7 @@ with open(f"{directory}/{file_name}", "w") as f:
             line += dol().rjust(15)                 # CLM_SQSTRTN_RDCTN_AMT
 
             # 21
-            line += "?"                             # CLM_LINE_CARR_HPSA_SCRCTY_CD
+            line += random.choice(hpsa())           # CLM_LINE_CARR_HPSA_SCRCTY_CD
 
             line += "\n"
 

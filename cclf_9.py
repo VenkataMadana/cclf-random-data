@@ -9,7 +9,6 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import replicate_files
 from utils import get_beneficiaries
-from utils import dt
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -26,11 +25,9 @@ if len(sys.argv) == 2:
 else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
-# Prepare data structures for lookups.
-beneficiaries = list(get_beneficiaries().values())
-
-# Prepare data structures for lookups.
-beneficiaries = list(get_beneficiaries().values())
+# Prepare data structures for lookups. Only beneficiaries with an MBI change
+# appear in this file.
+beneficiaries = [bene for bene in get_beneficiaries().values() if bene["prev_mbi"]]
 beneficiaries_count = len(beneficiaries)
 
 # Enumerate over the beneficiaries and emit to a temporary file.
@@ -48,12 +45,12 @@ with open(f"{directory}/{file_name}", "w") as f:
         line = ""
 
         # 1-6
-        line += "M"             # HICN_MBI_XREF_IND
-        line += bene["mbi"]     # CRNT_NUM
-        line += bene["mbi"]     # PRVS_NUM
-        line += dt()            # PRVS_ID_EFCTV_DT
-        line += dt()            # PRVS_ID_OBSLT_DT
-        line += "".ljust(12)    # BENE_RRB_NUM
+        line += "M"                     # HICN_MBI_XREF_IND
+        line += bene["mbi"]             # CRNT_NUM
+        line += bene["prev_mbi"]        # PRVS_NUM
+        line += bene["prev_mbi_efctv"]  # PRVS_ID_EFCTV_DT
+        line += bene["prev_mbi_obslt"]  # PRVS_ID_OBSLT_DT
+        line += "".ljust(12)            # BENE_RRB_NUM
 
         line += "\n"
 

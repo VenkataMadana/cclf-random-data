@@ -10,7 +10,7 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import dol, replicate_files
 from utils import get_claims
-from utils import ctc, ynb, twobyte, cat
+from utils import ynb, twobyte, crc, ansi_reason, ansi_group
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -28,7 +28,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("A")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -48,7 +48,7 @@ with open(f"{directory}/{file_name}", "w") as f:
         line += claim["num"].ljust(13)          # CUR_CLM_UNIQ_ID
         line += claim["mbi"]                    # BENE_MBI_ID
         line += "".ljust(11)                    # BENE_HIC_NUM
-        line += random.choice(ctc()).rjust(2)   # CLM_TYPE_CD
+        line += claim["ctc"]                    # CLM_TYPE_CD
         line += claim["from_dt"]                # CLM_ACTV_CARE_FROM_DT
         line += ynb()                           # CLM_NGACO_PBPMT_SW
         line += ynb()                           # CLM_NGACO_PDSCHRG_HCBS_SW
@@ -74,15 +74,15 @@ with open(f"{directory}/{file_name}", "w") as f:
         line += dol().rjust(15)                 # CLM_INSTNL_PRFNL_AMT
         line += dol().rjust(19)                 # CLM_NCVRD_CHRG_AMT
         line += dol().rjust(19)                 # CLM_MDCR_DDCTBL_AMT
-        line += "??".ljust(2)                   # CLM_RLT_COND_CD
+        line += random.choice(crc())            # CLM_RLT_COND_CD
         line += dol().rjust(19)                 # CLM_OPRTNL_OUTLR_AMT
         line += dol().rjust(19)                 # CLM_MDCR_NEW_TECH_AMT
         line += dol().rjust(19)                 # CLM_ISLET_ISOLN_AMT
         line += dol().rjust(19)                 # CLM_SQSTRTN_RDCTN_AMT
 
         # 31-33
-        line += random.choice(cat()).ljust(3)   # CLM_1_REV_CNTR_ANSI_RSN_CD       
-        line += "??".ljust(2)                   # CLM_1_REV_CNTR_ANSI_GRP_CD
+        line += random.choice(ansi_reason()).ljust(3) # CLM_1_REV_CNTR_ANSI_RSN_CD       
+        line += random.choice(ansi_group())     # CLM_1_REV_CNTR_ANSI_GRP_CD
         line += dol().rjust(19)                 # CLM_MIPS_PMT_AMT
 
         line += "\n"

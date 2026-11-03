@@ -10,7 +10,7 @@ faker = Faker()
 sys.path.append("./utils/")
 from utils import dol, replicate_files
 from utils import get_claims, get_bene, get_prov
-from utils import ctc, cdsc, ndc, psiqc, daw, flt, rint, cat, pstc
+from utils import cdsc, ndc, psiqc, daw, flt, rint, cat, pstc
 
 # Define the path for the files.
 directory = f"./_output/cache"
@@ -28,7 +28,7 @@ else:
     file_date = datetime.now().strftime("%Y-%m-%d")
 
 # Prepare data structures for lookups.
-claims = get_claims()
+claims = get_claims("D")
 claims_count = len(claims)
 
 # Enumerate over the claims and emit to a temporary file.
@@ -51,8 +51,8 @@ with open(f"{directory}/{file_name}", "w") as f:
         line += claim["mbi"]                    # BENE_MBI_ID
         line += "".ljust(11)                    # BENE_HIC_NUM
         line += ndc()                           # CLM_LINE_NDC_CD
-        line += random.choice(ctc()).ljust(2)   # CLM_TYPE_CD
-        line += claim["from_dt"]                # CLM_FROM_DT
+        line += claim["ctc"]                    # CLM_TYPE_CD
+        line += claim["from_dt"]                # CLM_LINE_FROM_DT
         line += random.choice(psiqc())          # PRVDR_SRVC_ID__QLFYR_CD
         line += prov["npi"].ljust(20)           # CLM_SRVC_PRVDR_GNRC_ID_NUM
         line += random.choice(cdsc())           # CLM_DSPNSNG_STUS_CD
@@ -60,14 +60,14 @@ with open(f"{directory}/{file_name}", "w") as f:
         
         # 11-20
         line += flt().rjust(24)                 # CLM_LINE_SRVC_UNIT_QTY
-        line += rint().rjust(9)                 # CLM_LINE_DAYS_SUPLY_QTY
+        line += rint().zfill(9)                 # CLM_LINE_DAYS_SUPLY_QTY
         line += random.choice(psiqc())          # PRVDR_PRSBNG_ID_QLFYR_CD
         line += prov["npi"].ljust(20)           # CLM_PRSBNG_PRVDR_GNRC_ID_NUM
         line += dol().rjust(13)                 # CLM_LINE_BENE_PMT_AMT
         line += random.choice(cat()).ljust(2)   # CLM_ADJSMT_TYPE_CD
         line += claim["from_dt"]                # CLM_EFCTV_DT
         line += claim["thru_dt"]                # CLM_IDR_LD_DT
-        line += rint().rjust(12)                # CLM_LINE_RX_SRVC_RFRNC_NUM  
+        line += rint().zfill(12)                # CLM_LINE_RX_SRVC_RFRNC_NUM  
         line += rint().rjust(9)                 # CLM_LINE_RX_FILL_NUM
 
         # 21
